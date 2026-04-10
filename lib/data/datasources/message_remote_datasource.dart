@@ -17,22 +17,25 @@ abstract class MessageRemoteDataSource {
 
 class MessageRemoteDataSourceImpl implements MessageRemoteDataSource {
   final FirebaseFirestore _firestore;
-
   MessageRemoteDataSourceImpl({required FirebaseFirestore firestore})
     : _firestore = firestore;
 
   CollectionReference<Map<String, dynamic>> get _conversations =>
       _firestore.collection('conversations');
 
+  /// Single-field query — no composite index needed. Sorts client-side.
   @override
   Stream<List<ConversationModel>> getConversations(String userId) {
     return _conversations
         .where('participantIds', arrayContains: userId)
-        .orderBy('lastMessageTime', descending: true)
         .snapshots()
-        .map(
-          (s) => s.docs.map((d) => ConversationModel.fromFirestore(d)).toList(),
-        );
+        .map((snap) {
+          final list = snap.docs
+              .map((d) => ConversationModel.fromFirestore(d))
+              .toList();
+          list.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+          return list;
+        });
   }
 
   @override
@@ -88,11 +91,9 @@ class MessageRemoteDataSourceImpl implements MessageRemoteDataSource {
           .where('participantIds', isEqualTo: participants)
           .limit(1)
           .get();
-
       if (query.docs.isNotEmpty) {
         return ConversationModel.fromFirestore(query.docs.first);
       }
-
       final newConv = ConversationModel(
         id: '',
         participantIds: participants,

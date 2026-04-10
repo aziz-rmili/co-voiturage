@@ -11,28 +11,29 @@ abstract class NotificationRemoteDataSource {
 
 class NotificationRemoteDataSourceImpl implements NotificationRemoteDataSource {
   final FirebaseFirestore _firestore;
-
   NotificationRemoteDataSourceImpl({required FirebaseFirestore firestore})
     : _firestore = firestore;
 
-  CollectionReference<Map<String, dynamic>> get _notifications =>
+  CollectionReference<Map<String, dynamic>> get _col =>
       _firestore.collection('notifications');
 
+  /// Single-field query on userId only — no composite index needed.
+  /// Sorts client-side.
   @override
   Stream<List<NotificationModel>> getNotifications(String userId) {
-    return _notifications
-        .where('userId', isEqualTo: userId)
-        .orderBy('timestamp', descending: true)
-        .snapshots()
-        .map(
-          (s) => s.docs.map((d) => NotificationModel.fromFirestore(d)).toList(),
-        );
+    return _col.where('userId', isEqualTo: userId).snapshots().map((snap) {
+      final list = snap.docs
+          .map((d) => NotificationModel.fromFirestore(d))
+          .toList();
+      list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return list;
+    });
   }
 
   @override
   Future<void> markAsRead(String notificationId) async {
     try {
-      await _notifications.doc(notificationId).update({'isRead': true});
+      await _col.doc(notificationId).update({'isRead': true});
     } catch (e) {
       throw ServerException(message: e.toString());
     }
@@ -41,12 +42,12 @@ class NotificationRemoteDataSourceImpl implements NotificationRemoteDataSource {
   @override
   Future<void> markAllAsRead(String userId) async {
     try {
-      final batch = _firestore.batch();
-      final unread = await _notifications
+      final snap = await _col
           .where('userId', isEqualTo: userId)
           .where('isRead', isEqualTo: false)
           .get();
-      for (final doc in unread.docs) {
+      final batch = _firestore.batch();
+      for (final doc in snap.docs) {
         batch.update(doc.reference, {'isRead': true});
       }
       await batch.commit();
@@ -57,10 +58,11 @@ class NotificationRemoteDataSourceImpl implements NotificationRemoteDataSource {
 
   @override
   Stream<int> getUnreadCount(String userId) {
-    return _notifications
+    return _col
         .where('userId', isEqualTo: userId)
-        .where('isRead', isEqualTo: false)
         .snapshots()
-        .map((s) => s.size);
+        .map(
+          (snap) => snap.docs.where((d) => d.data()['isRead'] == false).length,
+        );
   }
 }

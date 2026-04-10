@@ -12,7 +12,13 @@ class Validators {
 
   static String? password(String? value) {
     if (value == null || value.isEmpty) return AppStrings.passwordRequired;
-    if (value.length < 6) return AppStrings.passwordTooShort;
+    if (value.length < 8) return AppStrings.passwordTooShort;
+    final passwordRegex = RegExp(
+      r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#\$%\^&*()_+\-=[\]{};:\"\\|,.<>\/?]).{8,}',
+    );
+    if (!passwordRegex.hasMatch(value)) {
+      return AppStrings.passwordAlphaNumeric;
+    }
     return null;
   }
 

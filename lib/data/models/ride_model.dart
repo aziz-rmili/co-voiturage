@@ -12,12 +12,16 @@ class RideModel extends Ride {
     required super.dateHour,
     required super.availableSeats,
     required super.pricePerPassenger,
-    super.passengersIds,
+    super.pendingPassengerIds,
+    super.confirmedPassengerIds,
     super.status,
+    super.note,
     super.co2SavedKg,
   });
 
-  // ── Firestore → Model ────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────
+  // Firestore → Model
+  // ─────────────────────────────────────────────
 
   factory RideModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -35,13 +39,19 @@ class RideModel extends Ride {
       dateHour: (map['dateHour'] as Timestamp).toDate(),
       availableSeats: (map['availableSeats'] as num?)?.toInt() ?? 1,
       pricePerPassenger: (map['pricePerPassenger'] as num?)?.toDouble() ?? 0.0,
-      passengersIds: List<String>.from(map['passengersIds'] ?? []),
+      pendingPassengerIds: List<String>.from(map['pendingPassengerIds'] ?? []),
+      confirmedPassengerIds: List<String>.from(
+        map['confirmedPassengerIds'] ?? [],
+      ),
       status: _parseStatus(map['status']),
+      note: map['note'] as String? ?? '',
       co2SavedKg: (map['co2SavedKg'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
-  // ── Model → Firestore ────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────
+  // Model → Firestore
+  // ─────────────────────────────────────────────
 
   Map<String, dynamic> toMap() {
     return {
@@ -53,13 +63,17 @@ class RideModel extends Ride {
       'dateHour': Timestamp.fromDate(dateHour),
       'availableSeats': availableSeats,
       'pricePerPassenger': pricePerPassenger,
-      'passengersIds': passengersIds,
+      'pendingPassengerIds': pendingPassengerIds,
+      'confirmedPassengerIds': confirmedPassengerIds,
       'status': status.name,
+      'note': note,
       'co2SavedKg': co2SavedKg,
     };
   }
 
-  // ── Helper ───────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────
+  // Helpers
+  // ─────────────────────────────────────────────
 
   static RideStatus _parseStatus(dynamic value) {
     switch (value as String?) {
@@ -74,6 +88,10 @@ class RideModel extends Ride {
     }
   }
 
+  // ─────────────────────────────────────────────
+  // Entity → Model
+  // ─────────────────────────────────────────────
+
   factory RideModel.fromEntity(Ride ride) {
     return RideModel(
       id: ride.id,
@@ -85,8 +103,10 @@ class RideModel extends Ride {
       dateHour: ride.dateHour,
       availableSeats: ride.availableSeats,
       pricePerPassenger: ride.pricePerPassenger,
-      passengersIds: ride.passengersIds,
+      pendingPassengerIds: ride.pendingPassengerIds,
+      confirmedPassengerIds: ride.confirmedPassengerIds,
       status: ride.status,
+      note: ride.note,
       co2SavedKg: ride.effectiveCo2SavedKg,
     );
   }

@@ -1,34 +1,36 @@
 import '../entities/app_user.dart';
+import '../entities/driver_credentials.dart';
 
-/// Contract that the data layer must implement.
-/// The presentation layer depends only on this abstract interface.
 abstract class AuthRepository {
-  /// Returns the currently signed-in user, or null if unauthenticated.
   Future<AppUser?> getCurrentUser();
 
-  /// Sign in with email + password. Returns the authenticated [AppUser].
   Future<AppUser> loginWithEmail({
     required String email,
     required String password,
   });
 
-  /// Create a new account and write the [AppUser] document to Firestore.
-  Future<AppUser> registerWithEmail({
+  // Creates a passenger account — verification stays unverified.
+  Future<AppUser> registerPassenger({
     required String name,
     required String email,
     required String phone,
     required String password,
   });
 
-  /// Trigger Firebase's password-reset email flow.
+  /// Creates a driver account (step 1) — verification unverified until
+  /// credentials are submitted via [submitDriverCredentials].
+  Future<AppUser> registerDriver({
+    required String name,
+    required String email,
+    required String phone,
+    required String password,
+  });
+
+  /// Submits driver license + photo — sets verification to pending.
+  Future<void> submitDriverCredentials(DriverCredentials credentials);
+
   Future<void> sendPasswordResetEmail({required String email});
-
-  /// Sign in with Google OAuth. Creates Firestore doc on first sign-in.
   Future<AppUser> loginWithGoogle();
-
-  /// Sign out from Firebase (and Google if applicable).
   Future<void> logout();
-
-  /// Stream that emits the current user whenever auth state changes.
   Stream<AppUser?> get authStateChanges;
 }

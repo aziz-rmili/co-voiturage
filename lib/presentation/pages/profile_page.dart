@@ -4,8 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
-import '../../presentation/blocs/profile_bloc.dart';
+import '../../../domain/entities/vehicle.dart';
 import '../../presentation/widgets/shared_widgets.dart';
+import '../blocs/profile_bloc.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -83,6 +84,14 @@ class _ProfilePageState extends State<ProfilePage> {
               ? state.distanceSharedKm
               : 1240.0;
           final photoUrl = state is ProfileLoaded ? state.user.photoUrl : '';
+          final vehicles = state is ProfileLoaded
+              ? state.user.vehicles
+              : const <Vehicle>[];
+          final pref = state is ProfileLoaded
+              ? state.user.ridePreferences
+              : const <String, dynamic>{};
+          final prefSubtitle = _preferencesSummary(pref);
+          final isDriver = state is ProfileLoaded ? state.user.isDriver : true;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
@@ -319,8 +328,44 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: Icons.person_outline_rounded,
                   title: 'Personal Info',
                   subtitle: 'Name, email, and phone number',
-                  onTap: () {},
+                  onTap: () async {
+                    if (state is! ProfileLoaded) return;
+                    final updated = await context.push<bool>(
+                      AppRoutes.personalInfo,
+                      extra: state.user,
+                    );
+                    if (updated == true && mounted) {
+                      context.read<ProfileBloc>().add(
+                        const ProfileLoadRequested(),
+                      );
+                    }
+                  },
                 ),
+                if (isDriver) ...[
+                  const SizedBox(height: 10),
+                  _SettingsTile(
+                    icon: Icons.directions_car_outlined,
+                    title: 'Vehicles',
+                    subtitle: vehicles.isEmpty
+                        ? 'Manage your registered cars'
+                        : vehicles
+                              .whereType<Vehicle>()
+                              .map(
+                                (v) => v.model.isNotEmpty
+                                    ? '${v.model} • ${v.licensePlate}'
+                                    : v.licensePlate,
+                              )
+                              .join(' • '),
+                    onTap: () => context.push(AppRoutes.vehicleDetails),
+                  ),
+                  const SizedBox(height: 10),
+                  _SettingsTile(
+                    icon: Icons.tune_rounded,
+                    title: 'Preferences',
+                    subtitle: prefSubtitle,
+                    onTap: () => context.push(AppRoutes.ridePreferences),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 _SettingsTile(
                   icon: Icons.account_balance_wallet_outlined,
@@ -328,6 +373,15 @@ class _ProfilePageState extends State<ProfilePage> {
                   subtitle: 'Bank accounts and cards',
                   onTap: () {},
                 ),
+                if (state is ProfileLoaded && state.user.isAdmin) ...[
+                  const SizedBox(height: 10),
+                  _SettingsTile(
+                    icon: Icons.admin_panel_settings_rounded,
+                    title: 'Admin Dashboard',
+                    subtitle: 'Monitor revenues and manage drivers',
+                    onTap: () => context.push(AppRoutes.adminDashboard),
+                  ),
+                ],
                 const SizedBox(height: 10),
 
                 // ── Logout
@@ -365,6 +419,18 @@ class _ProfilePageState extends State<ProfilePage> {
         },
       ),
     );
+  }
+
+  String _preferencesSummary(Map<String, dynamic> pref) {
+    if (pref.isEmpty) return 'Smoking, pets, music levels';
+    final parts = <String>[];
+    parts.add(
+      (pref['smokingAllowed'] as bool? ?? false) ? 'Smoking yes' : 'No smoking',
+    );
+    parts.add((pref['petsAllowed'] as bool? ?? true) ? 'Pets yes' : 'Pets no');
+    final music = pref['musicLevel'] as String?;
+    if (music != null) parts.add(music);
+    return parts.join(', ');
   }
 }
 

@@ -1,10 +1,9 @@
 import 'dart:async';
-
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-
 import '../../../core/errors/failures.dart';
 import '../../../domain/entities/app_user.dart';
+import '../../../domain/entities/driver_credentials.dart';
 import '../../../domain/repositories/auth_repository.dart';
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -27,19 +26,35 @@ class AuthLoginRequested extends AuthEvent {
   List<Object?> get props => [email, password];
 }
 
-class AuthRegisterRequested extends AuthEvent {
-  final String nom;
-  final String email;
-  final String telephone;
-  final String password;
-  const AuthRegisterRequested({
-    required this.nom,
+class AuthRegisterPassengerRequested extends AuthEvent {
+  final String name, email, phone, password;
+  const AuthRegisterPassengerRequested({
+    required this.name,
     required this.email,
-    required this.telephone,
+    required this.phone,
     required this.password,
   });
   @override
-  List<Object?> get props => [nom, email, telephone];
+  List<Object?> get props => [name, email, phone];
+}
+
+class AuthRegisterDriverStep1Requested extends AuthEvent {
+  final String name, email, phone, password;
+  const AuthRegisterDriverStep1Requested({
+    required this.name,
+    required this.email,
+    required this.phone,
+    required this.password,
+  });
+  @override
+  List<Object?> get props => [name, email, phone];
+}
+
+class AuthSubmitDriverCredentials extends AuthEvent {
+  final DriverCredentials credentials;
+  const AuthSubmitDriverCredentials(this.credentials);
+  @override
+  List<Object?> get props => [credentials];
 }
 
 class AuthGoogleLoginRequested extends AuthEvent {
@@ -91,6 +106,19 @@ class AuthUnauthenticated extends AuthState {
   const AuthUnauthenticated();
 }
 
+/// Driver completed step 1 — needs to submit credentials (step 2).
+class AuthDriverStep1Complete extends AuthState {
+  final AppUser user;
+  const AuthDriverStep1Complete({required this.user});
+  @override
+  List<Object?> get props => [user];
+}
+
+/// Driver credentials submitted — verification is now pending.
+class AuthDriverCredentialsSubmitted extends AuthState {
+  const AuthDriverCredentialsSubmitted();
+}
+
 class AuthPasswordResetSent extends AuthState {
   final String email;
   const AuthPasswordResetSent({required this.email});
@@ -109,36 +137,30 @@ class AuthError extends AuthState {
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
-  StreamSubscription<AppUser?>? _authSubscription;
+  StreamSubscription<AppUser?>? _authSub;
 
   AuthBloc({required AuthRepository authRepository})
     : _authRepository = authRepository,
       super(const AuthInitial()) {
     on<AuthStarted>(_onStarted);
     on<AuthLoginRequested>(_onLogin);
-    on<AuthRegisterRequested>(_onRegister);
+    on<AuthRegisterPassengerRequested>(_onRegisterPassenger);
+    on<AuthRegisterDriverStep1Requested>(_onRegisterDriverStep1);
+    on<AuthSubmitDriverCredentials>(_onSubmitCredentials);
     on<AuthGoogleLoginRequested>(_onGoogleLogin);
     on<AuthForgotPasswordRequested>(_onForgotPassword);
     on<AuthLogoutRequested>(_onLogout);
     on<_AuthUserChanged>(_onUserChanged);
   }
 
-  // ── AuthStarted — subscribe to Firebase auth state stream ─────────────────
-
   Future<void> _onStarted(AuthStarted event, Emitter<AuthState> emit) async {
     emit(const AuthLoading());
-
-    // Cancel any previous subscription
-    await _authSubscription?.cancel();
-
-    // Listen to Firebase auth state and forward changes as BLoC events
-    _authSubscription = _authRepository.authStateChanges.listen(
+    await _authSub?.cancel();
+    _authSub = _authRepository.authStateChanges.listen(
       (user) => add(_AuthUserChanged(user)),
       onError: (_) => add(const _AuthUserChanged(null)),
     );
   }
-
-  // ── Internal auth state change forwarded from stream ─────────────────────
 
   void _onUserChanged(_AuthUserChanged event, Emitter<AuthState> emit) {
     if (event.user != null) {
@@ -147,8 +169,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(const AuthUnauthenticated());
     }
   }
-
-  // ── Login with email ──────────────────────────────────────────────────────
 
   Future<void> _onLogin(
     AuthLoginRequested event,
@@ -170,18 +190,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  // ── Register ──────────────────────────────────────────────────────────────
-
-  Future<void> _onRegister(
-    AuthRegisterRequested event,
+  Future<void> _onRegisterPassenger(
+    AuthRegisterPassengerRequested event,
     Emitter<AuthState> emit,
   ) async {
     emit(const AuthLoading());
     try {
-      final user = await _authRepository.registerWithEmail(
-        name: event.nom,
+      final user = await _authRepository.registerPassenger(
+        name: event.name,
         email: event.email,
-        phone: event.telephone,
+        phone: event.phone,
         password: event.password,
       );
       emit(AuthAuthenticated(user: user));
@@ -194,7 +212,43 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  // ── Google sign-in ────────────────────────────────────────────────────────
+  Future<void> _onRegisterDriverStep1(
+    AuthRegisterDriverStep1Requested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(const AuthLoading());
+    try {
+      final user = await _authRepository.registerDriver(
+        name: event.name,
+        email: event.email,
+        phone: event.phone,
+        password: event.password,
+      );
+      // Don't fully authenticate — navigate to credentials step
+      emit(AuthDriverStep1Complete(user: user));
+    } on AuthFailure catch (f) {
+      emit(AuthError(message: f.message));
+    } on ServerFailure catch (f) {
+      emit(AuthError(message: f.message));
+    } catch (e) {
+      emit(AuthError(message: e.toString()));
+    }
+  }
+
+  Future<void> _onSubmitCredentials(
+    AuthSubmitDriverCredentials event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(const AuthLoading());
+    try {
+      await _authRepository.submitDriverCredentials(event.credentials);
+      emit(const AuthDriverCredentialsSubmitted());
+    } on ServerFailure catch (f) {
+      emit(AuthError(message: f.message));
+    } catch (e) {
+      emit(AuthError(message: e.toString()));
+    }
+  }
 
   Future<void> _onGoogleLogin(
     AuthGoogleLoginRequested event,
@@ -213,8 +267,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  // ── Forgot password ───────────────────────────────────────────────────────
-
   Future<void> _onForgotPassword(
     AuthForgotPasswordRequested event,
     Emitter<AuthState> emit,
@@ -232,8 +284,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  // ── Logout ────────────────────────────────────────────────────────────────
-
   Future<void> _onLogout(
     AuthLogoutRequested event,
     Emitter<AuthState> emit,
@@ -248,7 +298,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   @override
   Future<void> close() {
-    _authSubscription?.cancel();
+    _authSub?.cancel();
     return super.close();
   }
 }

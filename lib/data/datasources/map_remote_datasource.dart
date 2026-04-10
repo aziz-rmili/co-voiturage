@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:firebase_database/firebase_database.dart';
 import 'package:http/http.dart' as http;
 import '../../core/errors/exceptions.dart';
@@ -22,7 +23,7 @@ abstract class MapRemoteDataSource {
 
 class MapRemoteDataSourceImpl implements MapRemoteDataSource {
   final FirebaseDatabase _realtimeDb;
-  final String _orsApiKey; // OpenRouteService API key
+  final String _orsApiKey;
 
   MapRemoteDataSourceImpl({
     required FirebaseDatabase realtimeDb,
@@ -31,8 +32,6 @@ class MapRemoteDataSourceImpl implements MapRemoteDataSource {
        _orsApiKey = orsApiKey;
 
   DatabaseReference get _driversRef => _realtimeDb.ref('active_drivers');
-
-  // ── Driver locations stream ───────────────────────────────────────────────
 
   @override
   Stream<List<DriverLocation>> getNearbyDrivers({
@@ -59,8 +58,14 @@ class MapRemoteDataSourceImpl implements MapRemoteDataSource {
                 longitude: dLng,
                 rideId: map['rideId'] as String?,
                 destination: map['destination'] as String?,
+                departure: map['departure'] as String?,
                 departureTime: map['departureTime'] as String?,
+                departureLat: (map['departureLat'] as num?)?.toDouble(),
+                departureLng: (map['departureLng'] as num?)?.toDouble(),
+                arrivalLat: (map['arrivalLat'] as num?)?.toDouble(),
+                arrivalLng: (map['arrivalLng'] as num?)?.toDouble(),
                 seatsLeft: (map['seatsLeft'] as num?)?.toInt() ?? 0,
+                pricePerSeat: (map['pricePerSeat'] as num?)?.toDouble(),
                 updatedAt: DateTime.fromMillisecondsSinceEpoch(
                   (map['updatedAt'] as num?)?.toInt() ??
                       DateTime.now().millisecondsSinceEpoch,
@@ -74,8 +79,6 @@ class MapRemoteDataSourceImpl implements MapRemoteDataSource {
     });
   }
 
-  // ── Publish driver location ───────────────────────────────────────────────
-
   @override
   Future<void> publishDriverLocation(DriverLocation location) async {
     try {
@@ -84,8 +87,14 @@ class MapRemoteDataSourceImpl implements MapRemoteDataSource {
         'longitude': location.longitude,
         'rideId': location.rideId,
         'destination': location.destination,
+        'departure': location.departure,
         'departureTime': location.departureTime,
+        'departureLat': location.departureLat,
+        'departureLng': location.departureLng,
+        'arrivalLat': location.arrivalLat,
+        'arrivalLng': location.arrivalLng,
         'seatsLeft': location.seatsLeft,
+        'pricePerSeat': location.pricePerSeat,
         'updatedAt': location.updatedAt.millisecondsSinceEpoch,
       });
     } catch (e) {
@@ -102,8 +111,6 @@ class MapRemoteDataSourceImpl implements MapRemoteDataSource {
     }
   }
 
-  // ── OpenRouteService polyline ─────────────────────────────────────────────
-
   @override
   Future<List<List<double>>> getRoute({
     required double fromLat,
@@ -111,79 +118,127 @@ class MapRemoteDataSourceImpl implements MapRemoteDataSource {
     required double toLat,
     required double toLng,
   }) async {
+    final hasValidOrsKey =
+        _orsApiKey.isNotEmpty && _orsApiKey != 'YOUR_ORS_API_KEY_HERE';
+
+    if (hasValidOrsKey) {
+      final orsRoute = await _getRouteFromOrs(
+        fromLat: fromLat,
+        fromLng: fromLng,
+        toLat: toLat,
+        toLng: toLng,
+      );
+      if (orsRoute.isNotEmpty) {
+        return orsRoute;
+      }
+    }
+
+    final osrmRoute = await _getRouteFromOsrm(
+      fromLat: fromLat,
+      fromLng: fromLng,
+      toLat: toLat,
+      toLng: toLng,
+    );
+    if (osrmRoute.isNotEmpty) {
+      return osrmRoute;
+    }
+
+    throw const ServerException(
+      message: 'Could not compute road route for this trip.',
+    );
+  }
+
+  Future<List<List<double>>> _getRouteFromOrs({
+    required double fromLat,
+    required double fromLng,
+    required double toLat,
+    required double toLng,
+  }) async {
     const baseUrl =
         'https://api.openrouteservice.org/v2/directions/driving-car';
-    final uri = Uri.parse(baseUrl);
     final body = jsonEncode({
       'coordinates': [
         [fromLng, fromLat],
         [toLng, toLat],
       ],
     });
-
     try {
       final response = await http.post(
-        uri,
+        Uri.parse(baseUrl),
         headers: {
           'Authorization': _orsApiKey,
           'Content-Type': 'application/json',
         },
         body: body,
       );
-
       if (response.statusCode != 200) {
-        throw ServerException(message: 'ORS error: ${response.statusCode}');
+        return const [];
       }
-
       final json = jsonDecode(response.body) as Map<String, dynamic>;
       final coords =
           (json['features'] as List?)?.first['geometry']['coordinates']
               as List? ??
           [];
+      return coords
+          .map<List<double>>(
+            (c) => [(c as List)[1].toDouble(), c[0].toDouble()],
+          )
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<List<double>>> _getRouteFromOsrm({
+    required double fromLat,
+    required double fromLng,
+    required double toLat,
+    required double toLng,
+  }) async {
+    final uri = Uri.parse(
+      'https://router.project-osrm.org/route/v1/driving/'
+      '$fromLng,$fromLat;$toLng,$toLat'
+      '?overview=full&geometries=geojson',
+    );
+
+    try {
+      final response = await http.get(uri);
+      if (response.statusCode != 200) {
+        return const [];
+      }
+
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      final routes = json['routes'] as List?;
+      if (routes == null || routes.isEmpty) {
+        return const [];
+      }
+
+      final geometry = routes.first['geometry'] as Map<String, dynamic>?;
+      final coords = geometry?['coordinates'] as List? ?? const [];
 
       return coords
           .map<List<double>>(
             (c) => [(c as List)[1].toDouble(), c[0].toDouble()],
           )
           .toList();
-    } catch (e) {
-      throw ServerException(message: e.toString());
+    } catch (_) {
+      return const [];
     }
   }
-
-  // ── Haversine distance ────────────────────────────────────────────────────
 
   double _haversineKm(double lat1, double lng1, double lat2, double lng2) {
-    const r = 6371.0;
-    final dLat = _rad(lat2 - lat1);
-    final dLng = _rad(lng2 - lng1);
+    const earthRadiusKm = 6371.0;
+    final dLat = _degToRad(lat2 - lat1);
+    final dLng = _degToRad(lng2 - lng1);
     final a =
-        _sin2(dLat / 2) + _cos(_rad(lat1)) * _cos(_rad(lat2)) * _sin2(dLng / 2);
-    return r * 2 * _asin(_sqrt(a));
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_degToRad(lat1)) *
+            math.cos(_degToRad(lat2)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return earthRadiusKm * c;
   }
 
-  double _rad(double deg) => deg * 3.141592653589793 / 180;
-  double _sin2(double x) => _sin(x) * _sin(x);
-  double _sin(double x) {
-    // Taylor series sin
-    double s = x, t = x;
-    for (int i = 1; i <= 6; i++) {
-      t *= -x * x / ((2 * i) * (2 * i + 1));
-      s += t;
-    }
-    return s;
-  }
-
-  double _cos(double x) => _sin(3.141592653589793 / 2 - x);
-  double _sqrt(double x) {
-    if (x <= 0) return 0;
-    double r = x;
-    for (int i = 0; i < 20; i++) r = (r + x / r) / 2;
-    return r;
-  }
-
-  double _asin(double x) {
-    // arcsin via atan approximation
-    return x + (x * x * x) / 6 + (3 * x * x * x * x * x) / 40;
-  }
+  double _degToRad(double deg) => deg * math.pi / 180.0;
 }

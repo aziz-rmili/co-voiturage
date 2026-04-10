@@ -4,8 +4,6 @@ import '../../../domain/entities/conversation.dart';
 import '../../../domain/entities/message.dart';
 import '../../../domain/repositories/message_repository.dart';
 
-// ── Events ────────────────────────────────────────────────────────────────────
-
 abstract class MessagesEvent extends Equatable {
   const MessagesEvent();
   @override
@@ -37,7 +35,21 @@ class MessageSent extends MessagesEvent {
   List<Object?> get props => [message];
 }
 
-// ── States ────────────────────────────────────────────────────────────────────
+/// Creates a conversation lazily on first message send.
+class MessagesGetOrCreateConversation extends MessagesEvent {
+  final String currentUserId;
+  final String otherUserId;
+  final String? rideId;
+  final String firstMessage;
+  const MessagesGetOrCreateConversation({
+    required this.currentUserId,
+    required this.otherUserId,
+    this.rideId,
+    required this.firstMessage,
+  });
+  @override
+  List<Object?> get props => [currentUserId, otherUserId, rideId, firstMessage];
+}
 
 abstract class MessagesState extends Equatable {
   const MessagesState();
@@ -64,14 +76,20 @@ class ChatLoaded extends MessagesState {
   List<Object?> get props => [messages, conversationId];
 }
 
+/// Emitted after a conversation is created so the chat page can subscribe.
+class ConversationCreated extends MessagesState {
+  final String conversationId;
+  const ConversationCreated(this.conversationId);
+  @override
+  List<Object?> get props => [conversationId];
+}
+
 class MessagesError extends MessagesState {
   final String message;
   const MessagesError(this.message);
   @override
   List<Object?> get props => [message];
 }
-
-// ── BLoC ──────────────────────────────────────────────────────────────────────
 
 class MessagesBloc extends Bloc<MessagesEvent, MessagesState> {
   final MessageRepository _messageRepository;
@@ -82,6 +100,7 @@ class MessagesBloc extends Bloc<MessagesEvent, MessagesState> {
     on<MessagesLoadRequested>(_onLoad);
     on<MessagesChatOpened>(_onChatOpened);
     on<MessageSent>(_onMessageSent);
+    on<MessagesGetOrCreateConversation>(_onGetOrCreate);
   }
 
   Future<void> _onLoad(
@@ -115,6 +134,35 @@ class MessagesBloc extends Bloc<MessagesEvent, MessagesState> {
   ) async {
     try {
       await _messageRepository.sendMessage(event.message);
+    } catch (e) {
+      emit(MessagesError(e.toString()));
+    }
+  }
+
+  Future<void> _onGetOrCreate(
+    MessagesGetOrCreateConversation event,
+    Emitter<MessagesState> emit,
+  ) async {
+    try {
+      final conv = await _messageRepository.getOrCreateConversation(
+        currentUserId: event.currentUserId,
+        otherUserId: event.otherUserId,
+        rideId: event.rideId,
+      );
+      // Emit conversation ID so chat page can subscribe
+      emit(ConversationCreated(conv.id));
+
+      // Send the first message
+      await _messageRepository.sendMessage(
+        Message(
+          id: '',
+          conversationId: conv.id,
+          senderId: event.currentUserId,
+          receiverId: event.otherUserId,
+          text: event.firstMessage,
+          timestamp: DateTime.now(),
+        ),
+      );
     } catch (e) {
       emit(MessagesError(e.toString()));
     }

@@ -43,6 +43,7 @@ class SeedingService {
         'preferences': ['no_smoking', 'pets_welcome'],
         'averageRating': 4.9,
         'verification': 'verified',
+        'role': 'passenger',
       },
       {
         'uid': 'seed_user_ahmed',
@@ -54,6 +55,7 @@ class SeedingService {
         'preferences': ['no_smoking'],
         'averageRating': 4.9,
         'verification': 'verified',
+        'role': 'driver',
       },
       {
         'uid': 'seed_user_maher',
@@ -181,7 +183,8 @@ class SeedingService {
         ),
         'availableSeats': 3,
         'pricePerPassenger': 4.0,
-        'passengersIds': ['seed_user_julien'],
+        'pendingPassengerIds': [],
+        'confirmedPassengerIds': ['seed_user_julien'],
         'status': 'scheduled',
       },
       // Upcoming - pending (Julien as passenger)
@@ -197,7 +200,8 @@ class SeedingService {
         ),
         'availableSeats': 2,
         'pricePerPassenger': 8.0,
-        'passengersIds': ['seed_user_julien'],
+        'pendingPassengerIds': [],
+        'confirmedPassengerIds': ['seed_user_julien'],
         'status': 'scheduled',
       },
       // Popular route - Tunis → Sidi Bou Said (Ahmed)
@@ -211,7 +215,8 @@ class SeedingService {
         'dateHour': Timestamp.fromDate(now.add(const Duration(hours: 2))),
         'availableSeats': 3,
         'pricePerPassenger': 4.0,
-        'passengersIds': [],
+        'pendingPassengerIds': [],
+        'confirmedPassengerIds': [],
         'status': 'scheduled',
       },
       // Popular route - Sousse → Monastir (Maher)
@@ -225,7 +230,7 @@ class SeedingService {
         'dateHour': Timestamp.fromDate(now.add(const Duration(hours: 3))),
         'availableSeats': 2,
         'pricePerPassenger': 5.0,
-        'passengersIds': [],
+        'pendingPassengerIds': [], 'confirmedPassengerIds': [],
         'status': 'scheduled',
       },
       // Trip detail showcase - Nabeul → Sousse (Mounir)
@@ -241,7 +246,7 @@ class SeedingService {
         ),
         'availableSeats': 3,
         'pricePerPassenger': 16.0,
-        'passengersIds': [],
+        'pendingPassengerIds': [], 'confirmedPassengerIds': [],
         'status': 'scheduled',
         'vehicleModel': 'Tesla Model 3',
         'vehicleColor': 'White',
@@ -259,7 +264,8 @@ class SeedingService {
         'dateHour': Timestamp.fromDate(now.subtract(const Duration(days: 5))),
         'availableSeats': 3,
         'pricePerPassenger': 3.5,
-        'passengersIds': ['seed_user_julien', 'seed_user_amir'],
+        'pendingPassengerIds': [],
+        'confirmedPassengerIds': ['seed_user_julien', 'seed_user_amir'],
         'status': 'completed',
       },
       {
@@ -272,7 +278,8 @@ class SeedingService {
         'dateHour': Timestamp.fromDate(now.subtract(const Duration(days: 10))),
         'availableSeats': 2,
         'pricePerPassenger': 3.0,
-        'passengersIds': ['seed_user_mayssem', 'seed_user_aysser'],
+        'pendingPassengerIds': [],
+        'confirmedPassengerIds': ['seed_user_mayssem', 'seed_user_aysser'],
         'status': 'completed',
       },
     ];
@@ -483,33 +490,56 @@ class SeedingService {
   Future<void> _seedDriverLocations() async {
     final driversRef = _realtimeDb.ref('active_drivers');
 
-    // Three drivers near Tunis matching the map design
+    // seed_ride_3: Tunis → Sidi Bou Said (Ahmed)
+    // seed_ride_4: Sousse → Monastir     (Maher)
+    // seed_ride_5: Nabeul → Sousse       (Mounir)
     final drivers = {
       'seed_user_ahmed': {
         'latitude': 36.8320,
         'longitude': 10.1750,
         'rideId': 'seed_ride_3',
+        // route: Tunis center → Sidi Bou Said
+        'departure': 'Tunis',
         'destination': 'Sidi Bou Said',
+        'departureLat': 36.8190,
+        'departureLng': 10.1658,
+        'arrivalLat': 36.8685,
+        'arrivalLng': 10.3453,
         'departureTime': '9:15 AM',
         'seatsLeft': 2,
+        'pricePerSeat': 4,
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
       },
       'seed_user_maher': {
         'latitude': 36.7980,
         'longitude': 10.1600,
         'rideId': 'seed_ride_4',
+        // route: Sousse → Monastir
+        'departure': 'Sousse',
         'destination': 'Monastir',
+        'departureLat': 35.8245,
+        'departureLng': 10.6346,
+        'arrivalLat': 35.7643,
+        'arrivalLng': 10.8113,
         'departureTime': '10:00 AM',
         'seatsLeft': 3,
+        'pricePerSeat': 5,
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
       },
       'seed_user_mounir': {
         'latitude': 36.8100,
         'longitude': 10.1900,
         'rideId': 'seed_ride_5',
-        'destination': 'Gare du Nord',
+        // route: Nabeul → Sousse
+        'departure': 'Nabeul',
+        'destination': 'Sousse',
+        'departureLat': 36.4512,
+        'departureLng': 10.7365,
+        'arrivalLat': 35.8245,
+        'arrivalLng': 10.6346,
         'departureTime': '8:45 AM',
         'seatsLeft': 2,
+        'pricePerSeat': 16,
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
       },
     };

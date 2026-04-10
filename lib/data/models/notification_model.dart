@@ -44,6 +44,12 @@ class NotificationModel extends AppNotification {
     switch (v as String?) {
       case 'tripConfirmed':
         return NotificationType.tripConfirmed;
+      case 'bookingRequested':
+        return NotificationType.bookingRequested;
+      case 'bookingApproved':
+        return NotificationType.bookingApproved;
+      case 'bookingRejected':
+        return NotificationType.bookingRejected;
       case 'paymentReceived':
         return NotificationType.paymentReceived;
       case 'systemUpdate':

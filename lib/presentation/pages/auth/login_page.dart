@@ -150,7 +150,6 @@ class _LoginPageState extends State<LoginPage> {
                     hintText: '••••••••',
                     prefixIcon: Icons.lock_outline_rounded,
                     obscureText: _obscurePassword,
-                    validator: Validators.password,
                     suffixIcon: GestureDetector(
                       onTap: () =>
                           setState(() => _obscurePassword = !_obscurePassword),

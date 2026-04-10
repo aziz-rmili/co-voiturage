@@ -6,13 +6,11 @@ import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../domain/entities/ride.dart';
-import '../../blocs/auth_bloc.dart';
-import '../../blocs/trips_bloc.dart';
+import '../../blocs/blocs.dart';
 import '../../widgets/shared_widgets.dart';
 
 class MyTripsPage extends StatefulWidget {
   const MyTripsPage({super.key});
-
   @override
   State<MyTripsPage> createState() => _MyTripsPageState();
 }
@@ -20,16 +18,20 @@ class MyTripsPage extends StatefulWidget {
 class _MyTripsPageState extends State<MyTripsPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
+  String? _currentUserId;
 
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 2, vsync: this);
     _tabCtrl.addListener(() {
-      context.read<TripsBloc>().add(TripsTabChanged(_tabCtrl.index));
+      if (!_tabCtrl.indexIsChanging) {
+        context.read<TripsBloc>().add(TripsTabChanged(_tabCtrl.index));
+      }
     });
     final auth = context.read<AuthBloc>().state;
     if (auth is AuthAuthenticated) {
+      _currentUserId = auth.user.uid;
       context.read<TripsBloc>().add(TripsLoadRequested(auth.user.uid));
     }
   }
@@ -77,8 +79,6 @@ class _MyTripsPageState extends State<MyTripsPage>
                         ),
                       ),
                       const SizedBox(height: 20),
-
-                      // Tabs
                       Row(
                         children: [
                           _Tab(
@@ -100,122 +100,148 @@ class _MyTripsPageState extends State<MyTripsPage>
                 ),
               ),
 
-              // ── Trips
+              // ── Content
               if (state is TripsLoading)
                 const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.forestGreen,
+                    ),
+                  ),
+                )
+              else if (state is TripsError)
+                SliverFillRemaining(
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: AppColors.textMuted,
+                          size: 48,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          state.message,
+                          style: const TextStyle(color: AppColors.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
                 )
               else if (state is TripsLoaded && state.activeRides.isNotEmpty)
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
-                      (context, i) => _TripCard(ride: state.activeRides[i]),
+                      (context, i) => _TripCard(
+                        ride: state.activeRides[i],
+                        currentUserId: _currentUserId ?? '',
+                      ),
                       childCount: state.activeRides.length,
                     ),
                   ),
                 )
-              else
-                // Seed data for demo
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      _SeedTripCard(
-                        timeLabel: 'TODAY • 17:30',
-                        status: 'CONFIRMED',
-                        statusColor: AppColors.brownOrange,
-                        from: 'Tunis',
-                        to: 'Sidi Bou Said',
-                        co2: '2.4 kg',
-                        driverName: 'Sami N',
-                        onDetails: () {},
-                      ),
-                      _SeedTripCard(
-                        timeLabel: 'THU, OCT 24 • 08:15',
-                        status: 'PENDING',
-                        statusColor: AppColors.textMuted,
-                        from: 'Nabeul',
-                        to: 'Kelibia',
-                        co2: '4.1 kg',
-                        driverName: 'Salim K',
-                        onDetails: () {},
-                      ),
-                    ]),
+              else if (state is TripsLoaded && state.activeRides.isEmpty)
+                SliverFillRemaining(
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _tabCtrl.index == 0
+                              ? Icons.directions_car_outlined
+                              : Icons.history_rounded,
+                          color: AppColors.textMuted,
+                          size: 52,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _tabCtrl.index == 0
+                              ? 'No upcoming trips.\nBook a ride to get started!'
+                              : 'No past trips yet.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 15,
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
               // ── Bottom stats
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: AppColors.forestGreen,
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                Icons.eco_rounded,
-                                color: Colors.white70,
-                                size: 20,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                state is TripsLoaded
-                                    ? 'Total CO2 saved this month: ${state.totalCo2SavedKg.toStringAsFixed(0)}kg'
-                                    : 'Total CO2 saved this month: 42kg',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  height: 1.4,
+              if (state is TripsLoaded)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: AppColors.forestGreen,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.eco_rounded,
+                                  color: Colors.white70,
+                                  size: 20,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Total CO2 saved this month: ${state.totalCo2SavedKg.toStringAsFixed(0)}kg',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFD4EDDA),
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                Icons.card_giftcard_outlined,
-                                color: AppColors.forestGreen,
-                                size: 20,
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'You earned\nthe eco-friendly pass!',
-                                style: TextStyle(
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFD4EDDA),
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.card_giftcard_outlined,
                                   color: AppColors.forestGreen,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  height: 1.4,
+                                  size: 20,
                                 ),
-                              ),
-                            ],
+                                SizedBox(height: 8),
+                                Text(
+                                  'You earned\nthe eco-friendly pass!',
+                                  style: TextStyle(
+                                    color: AppColors.forestGreen,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
             ],
           );
         },
@@ -224,93 +250,74 @@ class _MyTripsPageState extends State<MyTripsPage>
   }
 }
 
-// ── Tab widget ────────────────────────────────────────────────────────────────
+// ── Tab ───────────────────────────────────────────────────────────────────────
 
 class _Tab extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
-
   const _Tab({required this.label, required this.active, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: active ? AppColors.textDark : AppColors.textMuted,
-            ),
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: active ? AppColors.textDark : AppColors.textMuted,
           ),
-          const SizedBox(height: 4),
-          if (active) Container(height: 2, width: 40, color: AppColors.orange),
-        ],
-      ),
-    );
-  }
+        ),
+        const SizedBox(height: 4),
+        if (active) Container(height: 2, width: 40, color: AppColors.orange),
+      ],
+    ),
+  );
 }
 
-// ── Trip card from domain ─────────────────────────────────────────────────────
+// ── Trip card ─────────────────────────────────────────────────────────────────
 
 class _TripCard extends StatelessWidget {
   final Ride ride;
-  const _TripCard({required this.ride});
+  final String currentUserId;
+  const _TripCard({required this.ride, required this.currentUserId});
 
   @override
   Widget build(BuildContext context) {
-    final statusLabel = ride.status == RideStatus.scheduled
-        ? 'CONFIRMED'
-        : ride.status.name.toUpperCase();
-    final statusColor = ride.status == RideStatus.scheduled
-        ? AppColors.brownOrange
-        : AppColors.textMuted;
+    final isDriver = ride.driverId == currentUserId;
+    final isPending = ride.pendingPassengerIds.contains(currentUserId);
+    final isConfirmed = ride.confirmedPassengerIds.contains(currentUserId);
 
-    return _SeedTripCard(
-      timeLabel: DateFormat('EEE, MMM d • HH:mm').format(ride.dateHour),
-      status: statusLabel,
-      statusColor: statusColor,
-      from: ride.departureAddress.isNotEmpty
-          ? ride.departureAddress
-          : 'Departure',
-      to: ride.arrivalAddress.isNotEmpty ? ride.arrivalAddress : 'Arrival',
-      co2: '${(ride.availableSeats * 1.2).toStringAsFixed(1)} kg',
-      driverName: 'Driver',
-      onDetails: () => context.push('${AppRoutes.tripDetail}/${ride.id}'),
-    );
-  }
-}
+    // Determine status label and color from the current user's perspective
+    String statusLabel;
+    Color statusColor;
+    if (ride.status == RideStatus.cancelled) {
+      statusLabel = 'CANCELLED';
+      statusColor = AppColors.error;
+    } else if (ride.status == RideStatus.completed) {
+      statusLabel = 'COMPLETED';
+      statusColor = AppColors.textMuted;
+    } else if (isDriver) {
+      // Driver sees the ride as ACTIVE once it has any passenger
+      statusLabel = 'YOUR RIDE';
+      statusColor = AppColors.forestGreen;
+    } else if (isConfirmed) {
+      statusLabel = 'CONFIRMED';
+      statusColor = AppColors.brownOrange;
+    } else if (isPending) {
+      statusLabel = 'PENDING';
+      statusColor = AppColors.orange;
+    } else {
+      statusLabel = 'BOOKED';
+      statusColor = AppColors.textMuted;
+    }
 
-// ── Seed trip card ────────────────────────────────────────────────────────────
+    final co2 = (ride.availableSeats * 2.4).toStringAsFixed(1);
 
-class _SeedTripCard extends StatelessWidget {
-  final String timeLabel;
-  final String status;
-  final Color statusColor;
-  final String from;
-  final String to;
-  final String co2;
-  final String driverName;
-  final VoidCallback onDetails;
-
-  const _SeedTripCard({
-    required this.timeLabel,
-    required this.status,
-    required this.statusColor,
-    required this.from,
-    required this.to,
-    required this.co2,
-    required this.driverName,
-    required this.onDetails,
-  });
-
-  @override
-  Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(18),
@@ -328,12 +335,12 @@ class _SeedTripCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Time + status row
+          // Time + status
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                timeLabel,
+                DateFormat('EEE, MMM d • HH:mm').format(ride.dateHour),
                 style: const TextStyle(
                   color: AppColors.textMuted,
                   fontSize: 11,
@@ -365,7 +372,7 @@ class _SeedTripCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  status,
+                  statusLabel,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 11,
@@ -375,7 +382,7 @@ class _SeedTripCard extends StatelessWidget {
                 ),
               ),
               Text(
-                co2,
+                '$co2 kg',
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 16,
@@ -429,7 +436,9 @@ class _SeedTripCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      from,
+                      ride.departureAddress.isNotEmpty
+                          ? ride.departureAddress
+                          : 'Departure',
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 17,
@@ -446,7 +455,9 @@ class _SeedTripCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      to,
+                      ride.arrivalAddress.isNotEmpty
+                          ? ride.arrivalAddress
+                          : 'Arrival',
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 17,
@@ -463,46 +474,42 @@ class _SeedTripCard extends StatelessWidget {
           const Divider(color: Color(0xFFF0F0F0)),
           const SizedBox(height: 12),
 
-          // Driver row
+          // Seats info + details button
           Row(
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: AppColors.forestGreen.withOpacity(0.15),
-                child: Text(
-                  driverName[0],
-                  style: const TextStyle(
-                    color: AppColors.forestGreen,
-                    fontWeight: FontWeight.w700,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'SEATS',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 10,
+                      letterSpacing: 1,
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'DRIVER',
-                      style: TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 10,
-                        letterSpacing: 1,
-                      ),
+                  Text(
+                    '${ride.confirmedPassengerIds.length}/${ride.availableSeats} confirmed',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: AppColors.textDark,
                     ),
+                  ),
+                  if (ride.pendingPassengerIds.isNotEmpty)
                     Text(
-                      driverName,
+                      '${ride.pendingPassengerIds.length} pending',
                       style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: AppColors.textDark,
+                        color: AppColors.orange,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ],
-                ),
+                ],
               ),
+              const Spacer(),
               GestureDetector(
-                onTap: onDetails,
+                onTap: () => context.push('${AppRoutes.tripDetail}/${ride.id}'),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,

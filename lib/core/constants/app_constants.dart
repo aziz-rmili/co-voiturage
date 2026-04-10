@@ -6,12 +6,20 @@ abstract class AppRoutes {
   static const String home = '/home';
   static const String map = '/map';
   static const String trips = '/trips';
+  static const String allRides = '/all-rides';
   static const String messages = '/messages';
   static const String profile = '/profile';
+  static const String personalInfo = '/personal-info';
   static const String tripDetail = '/trip';
   static const String createRide = '/create-ride';
   static const String notifications = '/notifications';
+  static const String adminDashboard = '/admin';
+  static const String adminTrips = '/admin/trips';
+  static const String adminUserInfo = '/admin/user-info';
   static const String search = '/search';
+  static const String chat = '/chat';
+  static const String ridePreferences = '/ride-preferences';
+  static const String vehicleDetails = '/vehicle-details';
 }
 
 abstract class AppStrings {
@@ -46,7 +54,9 @@ abstract class AppStrings {
   static const String emailInvalid = 'Enter a valid email address.';
   static const String passwordRequired = 'Password is required.';
   static const String passwordTooShort =
-      'Password must be at least 6 characters.';
+      'Password must be at least 8 characters.';
+  static const String passwordAlphaNumeric =
+      'Password must include uppercase, lowercase, number, and special character.';
   static const String nameRequired = 'Full name is required.';
   static const String phoneRequired = 'Phone number is required.';
   static const String termsRequired =

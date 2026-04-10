@@ -81,8 +81,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       emit(
         ProfileLoaded(
           user: user,
-          co2SavedKg: 152.0, // fetched from Firestore in production
-          distanceSharedKm: 1240.0,
+          co2SavedKg: user.co2SavedKg,
+          distanceSharedKm: user.distanceSharedKm,
         ),
       );
     } catch (e) {

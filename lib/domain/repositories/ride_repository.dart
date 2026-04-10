@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../entities/ride.dart';
+import '../entities/ride_report.dart';
 
 abstract class RideRepository {
   /// Create a new ride in Firestore. Returns the created [Ride] with its id.
@@ -14,18 +15,39 @@ abstract class RideRepository {
     double radiusKm = 20,
   });
 
+  /// Stream all rides for admin reporting and statistics.
+  Stream<List<Ride>> getAllRides();
+
+  Future<void> reportRide({
+    required String rideId,
+    required String reporterId,
+    required String driverId,
+    required String reason,
+    String? details,
+  });
+
+  Stream<List<RideReport>> getRideReports();
+
+  Future<void> resolveRideReport(String reportId);
+
   /// Stream rides where the current user is driver or passenger.
   Stream<List<Ride>> getUserRides(String userId);
 
-  /// Add a passenger to a ride.
-  Future<void> bookRide({required String rideId, required String userId});
-
-  /// Remove a passenger from a ride.
+  Future<void> requestBooking({required String rideId, required String userId});
+  Future<void> confirmPassenger({
+    required String rideId,
+    required String passengerId,
+  });
+  Future<void> rejectPassenger({
+    required String rideId,
+    required String passengerId,
+  });
   Future<void> cancelBooking({required String rideId, required String userId});
-
-  /// Driver cancels the entire ride.
   Future<void> cancelRide(String rideId);
-
-  /// Mark a ride as completed.
+  Future<void> deleteRide(String rideId);
   Future<void> completeRide(String rideId);
+  Future<void> updatePassengerCo2({
+    required List<String> passengerIds,
+    required double co2PerPassenger,
+  });
 }

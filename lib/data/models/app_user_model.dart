@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/app_user.dart';
+import '../../domain/entities/vehicle.dart';
 
 class AppUserModel extends AppUser {
   const AppUserModel({
@@ -10,12 +11,17 @@ class AppUserModel extends AppUser {
     super.photoUrl,
     required super.dateInscription,
     super.preferences,
+    super.vehicles,
+    super.ridePreferences,
     super.averageRating,
     super.verification,
+    super.role,
     super.co2SavedKg,
+    super.distanceSharedKm,
+    super.reportCount,
+    super.isBanned,
+    super.bannedUntil,
   });
-
-  // ── Firestore → Model ────────────────────────────────────────────────────
 
   factory AppUserModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -33,13 +39,37 @@ class AppUserModel extends AppUser {
           ? (map['dateInscription'] as Timestamp).toDate()
           : DateTime.now(),
       preferences: List<String>.from(map['preferences'] ?? []),
+      vehicles:
+          (map['vehicles'] as List?)
+              ?.map((vehicleData) {
+                if (vehicleData is String) {
+                  return Vehicle(licensePlate: vehicleData);
+                }
+                if (vehicleData is Map) {
+                  return Vehicle.fromMap(
+                    Map<String, dynamic>.from(vehicleData),
+                  );
+                }
+                return null;
+              })
+              .whereType<Vehicle>()
+              .toList() ??
+          [],
+      ridePreferences: Map<String, dynamic>.from(
+        map['ridePreferences'] as Map? ?? const {},
+      ),
       averageRating: (map['averageRating'] as num?)?.toDouble() ?? 0.0,
       verification: _parseVerification(map['verification']),
+      role: _parseRole(map['role']),
       co2SavedKg: (map['co2SavedKg'] as num?)?.toDouble() ?? 0.0,
+      distanceSharedKm: (map['distanceSharedKm'] as num?)?.toDouble() ?? 0.0,
+      reportCount: (map['reportCount'] as num?)?.toInt() ?? 0,
+      isBanned: map['isBanned'] as bool? ?? false,
+      bannedUntil: map['bannedUntil'] != null
+          ? (map['bannedUntil'] as Timestamp).toDate()
+          : null,
     );
   }
-
-  // ── Model → Firestore ────────────────────────────────────────────────────
 
   Map<String, dynamic> toMap() {
     return {
@@ -49,13 +79,20 @@ class AppUserModel extends AppUser {
       'photoUrl': photoUrl,
       'dateInscription': Timestamp.fromDate(dateInscription),
       'preferences': preferences,
+      'vehicles': vehicles.map((vehicle) => vehicle.toMap()).toList(),
+      'ridePreferences': ridePreferences,
       'averageRating': averageRating,
       'verification': verification.name,
+      'role': role.name,
       'co2SavedKg': co2SavedKg,
+      'distanceSharedKm': distanceSharedKm,
+      'reportCount': reportCount,
+      'isBanned': isBanned,
+      'bannedUntil': bannedUntil != null
+          ? Timestamp.fromDate(bannedUntil!)
+          : null,
     };
   }
-
-  // ── Helper ───────────────────────────────────────────────────────────────
 
   static VerificationStatus _parseVerification(dynamic value) {
     switch (value as String?) {
@@ -68,18 +105,31 @@ class AppUserModel extends AppUser {
     }
   }
 
-  /// Convert a domain entity to a model (useful when creating from Firebase user).
-  factory AppUserModel.fromEntity(AppUser user) {
-    return AppUserModel(
-      uid: user.uid,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      photoUrl: user.photoUrl,
-      dateInscription: user.dateInscription,
-      preferences: user.preferences,
-      averageRating: user.averageRating,
-      verification: user.verification,
-    );
+  static UserRole _parseRole(dynamic value) {
+    switch (value as String?) {
+      case 'driver':
+        return UserRole.driver;
+      case 'admin':
+        return UserRole.admin;
+      default:
+        return UserRole.passenger;
+    }
   }
+
+  factory AppUserModel.fromEntity(AppUser user) => AppUserModel(
+    uid: user.uid,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    photoUrl: user.photoUrl,
+    dateInscription: user.dateInscription,
+    preferences: user.preferences,
+    vehicles: user.vehicles,
+    ridePreferences: user.ridePreferences,
+    averageRating: user.averageRating,
+    verification: user.verification,
+    role: user.role,
+    co2SavedKg: user.co2SavedKg,
+    distanceSharedKm: user.distanceSharedKm,
+  );
 }

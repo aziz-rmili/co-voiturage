@@ -2,31 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_constants.dart';
-import '../../blocs/auth_bloc.dart';
-import '../../blocs/home_bloc.dart';
-import '../../widgets/shared_widgets.dart';
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../domain/entities/app_user.dart';
+import '../../../domain/entities/ride.dart';
+import '../../blocs/blocs.dart';
+import '../../widgets/widgets.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
-
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
   final _searchCtrl = TextEditingController();
-
-  // Tunis center as default
   static const double _lat = 36.8065;
   static const double _lng = 10.1815;
+  bool _initiated = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initiated) return;
+    _initiated = true;
+    final auth = context.read<AuthBloc>().state;
+    final uid = auth is AuthAuthenticated ? auth.user.uid : '';
     context.read<HomeBloc>().add(
-      const HomeLoadRequested(userLat: _lat, userLng: _lng),
+      HomeLoadRequested(userLat: _lat, userLng: _lng, userId: uid),
     );
   }
 
@@ -51,9 +54,14 @@ class _HomePageState extends State<HomePage> {
       ),
       body: BlocBuilder<HomeBloc, HomeState>(
         builder: (context, state) {
+          final isLoaded = state is HomeLoaded;
+          // Use filteredRides getter — applies both search and date filter
+          final rides = isLoaded ? state.filteredRides : <Ride>[];
+          final drivers = isLoaded ? state.drivers : <String, AppUser>{};
+
           return CustomScrollView(
             slivers: [
-              // ── Hero heading
+              // ── Hero
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
@@ -84,7 +92,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
-              // ── Search bar
+              // ── Search — filters by arrival address
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -126,60 +134,57 @@ class _HomePageState extends State<HomePage> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: BlocBuilder<HomeBloc, HomeState>(
-                    builder: (context, state) {
-                      final filter = state is HomeLoaded
-                          ? state.dateFilter
-                          : 'today';
-                      return Row(
-                        children: [
-                          _FilterChip(
-                            label: 'Today',
-                            active: filter == 'today',
-                            onTap: () => context.read<HomeBloc>().add(
-                              const HomeDateFilterChanged('today'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          _FilterChip(
-                            label: 'Tomorrow',
-                            active: filter == 'tomorrow',
-                            onTap: () => context.read<HomeBloc>().add(
-                              const HomeDateFilterChanged('tomorrow'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          _FilterChip(
-                            label: 'Group',
-                            active: filter == 'group',
-                            icon: Icons.group_outlined,
-                            onTap: () => context.read<HomeBloc>().add(
-                              const HomeDateFilterChanged('group'),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+                  child: Row(
+                    children: [
+                      _FilterChip(
+                        label: 'Today',
+                        active: isLoaded && state.dateFilter == 'today',
+                        onTap: () => context.read<HomeBloc>().add(
+                          const HomeDateFilterChanged('today'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      _FilterChip(
+                        label: 'Tomorrow',
+                        active: isLoaded && state.dateFilter == 'tomorrow',
+                        onTap: () => context.read<HomeBloc>().add(
+                          const HomeDateFilterChanged('tomorrow'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      _FilterChip(
+                        label: 'Group',
+                        icon: Icons.group_outlined,
+                        active: isLoaded && state.dateFilter == 'group',
+                        onTap: () => context.read<HomeBloc>().add(
+                          const HomeDateFilterChanged('group'),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
 
-              // ── Stats row
+              // ── Stats cards
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: state is HomeLoaded
+                  child: isLoaded
                       ? Row(
                           children: [
+                            // Card 1: User's real CO2 saved
                             Expanded(
                               child: StatCard(
                                 label: 'CO2 Saved',
-                                value: state.co2SavedKg.toStringAsFixed(1),
+                                value: state.co2SavedKg == 0
+                                    ? '0.0'
+                                    : state.co2SavedKg.toStringAsFixed(1),
                                 unit: 'kg',
                                 dark: true,
                               ),
                             ),
                             const SizedBox(width: 12),
+                            // Card 2: Active scheduled rides in the system
                             Expanded(
                               child: StatCard(
                                 label: 'Active Trips',
@@ -191,7 +196,11 @@ class _HomePageState extends State<HomePage> {
                         )
                       : const SizedBox(
                           height: 100,
-                          child: Center(child: CircularProgressIndicator()),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.forestGreen,
+                            ),
+                          ),
                         ),
                 ),
               ),
@@ -212,7 +221,8 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       GestureDetector(
-                        onTap: () => context.push(AppRoutes.map),
+                        // Push AllRidesPage — shows every ride with full search/filter
+                        onTap: () => context.push(AppRoutes.allRides),
                         child: const Text(
                           'View all',
                           style: TextStyle(
@@ -228,12 +238,24 @@ class _HomePageState extends State<HomePage> {
               ),
 
               // ── Ride list
-              if (state is HomeLoaded && state.popularRides.isNotEmpty)
+              if (state is HomeLoading)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(40),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.forestGreen,
+                      ),
+                    ),
+                  ),
+                )
+              else if (rides.isNotEmpty)
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate((context, i) {
-                      final ride = state.popularRides[i];
+                      final ride = rides[i];
+                      final driver = drivers[ride.driverId];
                       return RideRouteCard(
                         from: ride.departureAddress.isNotEmpty
                             ? ride.departureAddress
@@ -241,117 +263,107 @@ class _HomePageState extends State<HomePage> {
                         to: ride.arrivalAddress.isNotEmpty
                             ? ride.arrivalAddress
                             : 'Arrival',
-                        driverName: 'Driver',
-                        driverRating: 4.9,
-                        driverTrips: 128,
+                        driverName: driver?.name ?? '...',
+                        driverRating: driver?.averageRating ?? 0.0,
+                        driverTrips: ride.passengersIds.length,
                         price: ride.pricePerPassenger,
                         onBook: () =>
                             context.push('${AppRoutes.tripDetail}/${ride.id}'),
                       );
-                    }, childCount: state.popularRides.length),
+                    }, childCount: rides.length),
                   ),
                 )
               else if (state is HomeLoaded)
-                // Seed data fallback cards
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      RideRouteCard(
-                        from: 'Tunis',
-                        to: 'Sidi Bou Said',
-                        driverName: 'Ahmed M',
-                        driverRating: 4.9,
-                        driverTrips: 128,
-                        price: 4,
-                        onBook: () {},
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.directions_car_outlined,
+                            color: AppColors.textMuted,
+                            size: 48,
+                          ),
+                          SizedBox(height: 12),
+                          Text(
+                            'No rides match your search.\nTry a different date or destination.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 14,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
                       ),
-                      RideRouteCard(
-                        from: 'Sousse',
-                        to: 'Monastir',
-                        driverName: 'Maher K',
-                        driverRating: 5.0,
-                        driverTrips: 42,
-                        price: 5,
-                        onBook: () {},
-                      ),
-                    ]),
+                    ),
                   ),
                 ),
 
-              // ── Map banner
+              // ── Map banner — switches to map TAB (tab index 2), not a new route
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
                   child: GestureDetector(
-                    onTap: () => context.push(AppRoutes.map),
+                    onTap: () {
+                      // Switch to Map tab inside MainShell — avoids the Provider error
+                      MainShell.switchTab(context, 2);
+                    },
                     child: Container(
                       height: 130,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
-                        image: const DecorationImage(
-                          image: AssetImage('assets/images/map_preview.png'),
-                          fit: BoxFit.cover,
-                          onError: _mapImageError,
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF1E4D35), Color(0xFF2D6E4E)],
                         ),
-                        color: AppColors.forestGreen,
                       ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              AppColors.forestGreen.withOpacity(0.7),
-                            ],
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text(
+                                  'NEARBY DRIVERS',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 10,
+                                    letterSpacing: 1.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Explore the map',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    'NEARBY DRIVERS',
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 10,
-                                      letterSpacing: 1.5,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    'Explore the map',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.map_outlined,
-                                color: AppColors.forestGreen,
-                              ),
+                            child: const Icon(
+                              Icons.map_outlined,
+                              color: AppColors.forestGreen,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -361,18 +373,29 @@ class _HomePageState extends State<HomePage> {
           );
         },
       ),
+      floatingActionButton: Builder(
+        builder: (ctx) {
+          final auth = ctx.watch<AuthBloc>().state;
+          final canCreateRide =
+              auth is AuthAuthenticated &&
+              (auth.user.isVerifiedDriver || auth.user.isAdmin);
+          if (!canCreateRide) return const SizedBox.shrink();
+          return FloatingActionButton(
+            onPressed: () => ctx.push(AppRoutes.createRide),
+            backgroundColor: AppColors.brownOrange,
+            child: const Icon(Icons.add, color: AppColors.orange),
+          );
+        },
+      ),
     );
   }
 }
-
-void _mapImageError(Object e, StackTrace? st) {}
 
 class _FilterChip extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
   final IconData? icon;
-
   const _FilterChip({
     required this.label,
     required this.active,

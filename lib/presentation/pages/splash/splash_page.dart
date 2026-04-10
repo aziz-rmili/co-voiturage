@@ -1,7 +1,11 @@
 import 'dart:async';
-import 'package:devmob_covoitlocal/core/constants/app_colors.dart';
-import 'package:devmob_covoitlocal/presentation/pages/pages.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../blocs/auth_bloc.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -12,7 +16,7 @@ class SplashPage extends StatefulWidget {
 
 class _SplashPageState extends State<SplashPage>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+  late AnimationController _ctrl;
   late Animation<double> _logoFade;
   late Animation<double> _logoScale;
   late Animation<double> _textFade;
@@ -23,216 +27,198 @@ class _SplashPageState extends State<SplashPage>
   void initState() {
     super.initState();
 
-    _controller = AnimationController(
+    _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2800),
     );
 
-    _logoFade = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.0, 0.35, curve: Curves.easeOut),
-      ),
-    );
-
+    _logoFade = _interval(0.0, 0.35);
     _logoScale = Tween<double>(begin: 0.75, end: 1.0).animate(
       CurvedAnimation(
-        parent: _controller,
+        parent: _ctrl,
         curve: const Interval(0.0, 0.35, curve: Curves.easeOutBack),
       ),
     );
-
-    _textFade = Tween<double>(begin: 0, end: 1).animate(
+    _textFade = _interval(0.3, 0.55);
+    _taglineFade = _interval(0.5, 0.75);
+    _progressValue = Tween<double>(begin: 0, end: 0.35).animate(
       CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.3, 0.55, curve: Curves.easeOut),
-      ),
-    );
-
-    _taglineFade = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.5, 0.75, curve: Curves.easeOut),
-      ),
-    );
-
-    _progressValue = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _controller,
+        parent: _ctrl,
         curve: const Interval(0.6, 1.0, curve: Curves.easeInOut),
       ),
     );
 
-    _controller.forward();
-
-    // Navigate to login after splash
-    Timer(const Duration(milliseconds: 3200), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const LoginPage()),
-        );
-      }
-    });
+    _ctrl.forward();
+    // AuthStarted is fired by AppRouter when providing the BLoC — no need here.
   }
+
+  Animation<double> _interval(double begin, double end) =>
+      Tween<double>(begin: 0, end: 1).animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: Interval(begin, end, curve: Curves.easeOut),
+        ),
+      );
 
   @override
   void dispose() {
-    _controller.dispose();
+    _ctrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.forestGreen,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── Logo + brand (centered vertically in upper 2/3)
-            Expanded(
-              flex: 3,
-              child: Center(
-                child: AnimatedBuilder(
-                  animation: _controller,
-                  builder: (_, __) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Logo icon
-                      FadeTransition(
-                        opacity: _logoFade,
-                        child: ScaleTransition(
-                          scale: _logoScale,
-                          child: const _RideLeafLogo(),
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (context, state) {
+        // Wait for the animation to finish before navigating
+        if (state is AuthAuthenticated) {
+          Future.delayed(const Duration(milliseconds: 3000), () {
+            if (mounted) context.go(AppRoutes.home);
+          });
+        } else if (state is AuthUnauthenticated) {
+          Future.delayed(const Duration(milliseconds: 3000), () {
+            if (mounted) context.go(AppRoutes.login);
+          });
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.forestGreen,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // ── Logo + brand (upper 3/5)
+              Expanded(
+                flex: 3,
+                child: Center(
+                  child: AnimatedBuilder(
+                    animation: _ctrl,
+                    builder: (_, __) => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FadeTransition(
+                          opacity: _logoFade,
+                          child: ScaleTransition(
+                            scale: _logoScale,
+                            child: const _RideLeafLogo(),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      // App name
+                        const SizedBox(height: 24),
+                        FadeTransition(
+                          opacity: _textFade,
+                          child: const Text(
+                            AppStrings.appName,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 42,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        FadeTransition(
+                          opacity: _textFade,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _line(),
+                              const SizedBox(width: 12),
+                              Text(
+                                AppStrings.tagline.toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 2.5,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              _line(),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // ── Tagline + progress (lower 2/5)
+              Expanded(
+                flex: 2,
+                child: AnimatedBuilder(
+                  animation: _ctrl,
+                  builder: (_, __) => Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
                       FadeTransition(
-                        opacity: _textFade,
-                        child: const Text(
-                          'RideLeaf',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 42,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.5,
+                        opacity: _taglineFade,
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 32),
+                          child: Column(
+                            children: [
+                              Text(
+                                'Your Daily Commute,',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                'Greener.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: AppColors.orange,
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      // Subtitle
-                      FadeTransition(
-                        opacity: _textFade,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _dividerLine(),
-                            const SizedBox(width: 12),
-                            const Text(
-                              'THE ECOLOGICAL CONCIERGE',
-                              style: TextStyle(
-                                color: Colors.white60,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: 2.5,
-                              ),
+                      const SizedBox(height: 40),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: _progressValue.value,
+                            backgroundColor: Colors.white12,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              AppColors.orange,
                             ),
-                            const SizedBox(width: 12),
-                            _dividerLine(),
-                          ],
+                            minHeight: 4,
+                          ),
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        AppStrings.version,
+                        style: TextStyle(
+                          color: Colors.white30,
+                          fontSize: 10,
+                          letterSpacing: 2,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
               ),
-            ),
-
-            // ── Tagline + progress (bottom 1/3)
-            Expanded(
-              flex: 2,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  AnimatedBuilder(
-                    animation: _taglineFade,
-                    builder: (_, __) => FadeTransition(
-                      opacity: _taglineFade,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 32),
-                        child: Column(
-                          children: [
-                            Text(
-                              'Your Daily Commute,',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 26,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            Text(
-                              'Greener.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: AppColors.orange,
-                                fontSize: 26,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-
-                  // Progress bar
-                  AnimatedBuilder(
-                    animation: _progressValue,
-                    builder: (_, __) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: _progressValue.value,
-                          backgroundColor: Colors.white12,
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            AppColors.orange,
-                          ),
-                          minHeight: 4,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Version info
-                  const Text(
-                    'VERSION 1.0.0  •  ECO-CERTIFIED',
-                    style: TextStyle(
-                      color: Colors.white30,
-                      fontSize: 10,
-                      letterSpacing: 2,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _dividerLine() =>
-      Container(width: 28, height: 1, color: Colors.white30);
+  Widget _line() => Container(width: 28, height: 1, color: Colors.white30);
 }
 
-/// The white rounded-square logo with leaf + orange lightning badge
 class _RideLeafLogo extends StatelessWidget {
   const _RideLeafLogo();
 
@@ -244,7 +230,6 @@ class _RideLeafLogo extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // White card
           Container(
             width: 100,
             height: 100,
@@ -267,8 +252,6 @@ class _RideLeafLogo extends StatelessWidget {
               ),
             ),
           ),
-
-          // Orange lightning badge
           Positioned(
             right: 0,
             bottom: 0,

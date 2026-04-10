@@ -6,29 +6,35 @@ class RideLeafTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hintText;
   final IconData prefixIcon;
+  final TextCapitalization textCapitalization;
   final bool obscureText;
   final TextInputType? keyboardType;
   final Widget? suffixIcon;
   final String? Function(String?)? validator;
+  final VoidCallback? onTap;
 
   const RideLeafTextField({
     super.key,
     required this.controller,
     required this.hintText,
     required this.prefixIcon,
+    this.textCapitalization = TextCapitalization.none,
     this.obscureText = false,
     this.keyboardType,
     this.suffixIcon,
     this.validator,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      textCapitalization: textCapitalization,
       obscureText: obscureText,
       keyboardType: keyboardType,
       validator: validator,
+      onTap: onTap,
       style: const TextStyle(fontSize: 15, color: AppColors.textDark),
       decoration: InputDecoration(
         hintText: hintText,
@@ -63,6 +69,7 @@ class RideLeafTextField extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
         ),
+        errorMaxLines: 2,
         contentPadding: const EdgeInsets.symmetric(
           vertical: 16,
           horizontal: 16,

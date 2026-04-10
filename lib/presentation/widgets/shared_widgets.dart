@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/constants/app_colors.dart';
+import '../../domain/repositories/notification_repository.dart';
+import '../../injection/service_locator.dart';
+import '../blocs/blocs.dart';
 
 // ── Top AppBar ────────────────────────────────────────────────────────────────
 
@@ -79,13 +83,58 @@ class RideLeafAppBar extends StatelessWidget implements PreferredSizeWidget {
           : null,
       actions: [
         if (onNotificationTap != null)
-          IconButton(
-            icon: const Icon(
-              Icons.notifications_outlined,
-              color: AppColors.textDark,
-              size: 24,
-            ),
-            onPressed: onNotificationTap,
+          BlocBuilder<AuthBloc, AuthState>(
+            builder: (context, authState) {
+              final uid =
+                  authState is AuthAuthenticated ? authState.user.uid : null;
+              if (uid == null) {
+                return IconButton(
+                  icon: const Icon(
+                    Icons.notifications_outlined,
+                    color: AppColors.textDark,
+                    size: 24,
+                  ),
+                  onPressed: onNotificationTap,
+                );
+              }
+
+              return StreamBuilder<int>(
+                stream: sl<NotificationRepository>().getUnreadCount(uid),
+                builder: (context, snap) {
+                  final unread = snap.data ?? 0;
+                  return IconButton(
+                    onPressed: onNotificationTap,
+                    icon: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        const Icon(
+                          Icons.notifications_outlined,
+                          color: AppColors.textDark,
+                          size: 24,
+                        ),
+                        if (unread > 0)
+                          Positioned(
+                            right: -1,
+                            top: -1,
+                            child: Container(
+                              width: 9,
+                              height: 9,
+                              decoration: BoxDecoration(
+                                color: AppColors.orange,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: AppColors.surfaceLight,
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
           ),
         if (avatarUrl != null)
           Padding(

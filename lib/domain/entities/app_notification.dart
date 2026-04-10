@@ -2,6 +2,9 @@ import 'package:equatable/equatable.dart';
 
 enum NotificationType {
   tripConfirmed,
+  bookingRequested,
+  bookingApproved,
+  bookingRejected,
   paymentReceived,
   systemUpdate,
   accountVerified,
